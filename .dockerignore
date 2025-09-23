@@ -1,0 +1,11 @@
+node_modules
+dist
+Dockerfile
+docker.env
+.git
+.gitignore
+*.log
+.vscode
+.DS_Store
+
+*.tsbuildinfo
