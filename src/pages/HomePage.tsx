@@ -13,6 +13,7 @@ const HomePage: React.FC = () => {
         <p className="text-lg text-gray-600 mb-8 max-w-md">
           Esta es la aplicación para la gestión de útiles escolares de tu colegio.
         </p>
+        
         <div className="flex space-x-4">
           <button className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-lg transition-colors">
             Seleccionar Curso

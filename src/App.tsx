@@ -1,41 +1,78 @@
 // src/App.tsx
-import React, { useEffect, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import HomePage from './pages/HomePage';
-import CourseSelectionPage from './components/CourseSelectionPage';
+// Nota: Estos componentes suelen estar en 'pages' si son rutas completas
+import CourseSelectionPage from './components/CourseSelectionPage'; 
 import CourseDetailsPage from './components/CourseDetailsPage';
-import { getHello } from './services/api';
-import viteLogo from '/vite.svg';
+import CourseAssignmentPage from './components/CourseAssignmentPage';
+import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from '@azure/msal-react';
+import { loginRequest } from './auth/auth-config';
+import TailwindContainer from './components/TailwindContainer';
+import TailwindButton from './components/TailwindButton';
 
 function App() {
-  const [message, setMessage] = useState("");
+  
+  const { instance } = useMsal();
+  const activeAccount = instance.getActiveAccount();
 
-  useEffect(() => {
-    getHello().then((response) => {
-      console.log("data : ", response.data.message);
-      setMessage(response.data.message);
-    });
-  }, []);
+  const handleLoginRedirect = () => {
+    instance
+      .loginRedirect({
+        ...loginRequest,
+        prompt: 'create',
+      })
+      .catch((error) => console.log(error));
+  };
 
-  return (
-    <>
-      {/* Rutas del sistema */}
-      <Routes>
-        <Route path="/" element={<MainLayout><HomePage /></MainLayout>} />
-        <Route path="/seleccionar-curso" element={<MainLayout><CourseSelectionPage /></MainLayout>} />
-        <Route path="/curso-detalles" element={<MainLayout><CourseDetailsPage /></MainLayout>} />
-      </Routes>
+  const handleLogout = () => {
+    instance.logoutRedirect({
+      postLogoutRedirectUri: window.location.origin, 
+    });
+  };
 
-      {/* Bloque visual adicional */}
-      
-      <h1>Vite + React</h1>
+  return (
+    <div className="App">
+      <AuthenticatedTemplate>
+        {activeAccount ? (
+          <>
+            <TailwindButton className="signOutButton" onClick={handleLogout} variant="primary">
+              Sign out
+            </TailwindButton>
+            <TailwindContainer>
+             
+             <Routes>
+              <Route path="/" element={<MainLayout><HomePage /></MainLayout>} />
+              <Route 
+                path="/seleccionar-curso" 
+                element={<MainLayout><CourseSelectionPage /></MainLayout>} 
+              />
 
-      <div className="card">
-        <p>Mensaje desde el backend: {message || "Cargando..."}</p>
-      </div>
-    </>
-  );
+              {/* 🎯 CAMBIO CLAVE: Agregamos el parámetro dinámico :courseId */}
+              <Route 
+                path="/curso-detalles/:courseId" 
+                element={<MainLayout><CourseDetailsPage /></MainLayout>} 
+              />
+
+              {/* Opcional: Si la asignación de útiles también depende del curso ID */}
+              <Route 
+                path="/asignar-util/:courseId" 
+                element={<MainLayout><CourseAssignmentPage /></MainLayout>} 
+              />
+
+            </Routes>
+            </TailwindContainer></>
+        ) : null}
+      </AuthenticatedTemplate>
+      <UnauthenticatedTemplate>
+        <div style={{ textAlign: 'center', marginTop: '3rem' }}>
+          <TailwindButton className="signInButton" onClick={handleLoginRedirect} variant="primary">
+            Sign up
+          </TailwindButton>
+        </div>
+      </UnauthenticatedTemplate>
+    </div>
+  );
 }
 
 export default App;
