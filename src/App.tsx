@@ -1,40 +1,59 @@
-// src/App.tsx
-import React, { useEffect, useState } from 'react';
+// C:\Users\jlopez\Desktop\Mi Colegio\mi-colegio.front\src\App.tsx
 import { Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import HomePage from './pages/HomePage';
 import CourseSelectionPage from './components/CourseSelectionPage';
 import CourseDetailsPage from './components/CourseDetailsPage';
-import { getHello } from './services/api';
-import viteLogo from '/vite.svg';
+import { AuthenticatedTemplate, UnauthenticatedTemplate, useMsal } from '@azure/msal-react';
+import { loginRequest } from './auth/auth-config';
+import { Button, Container } from 'react-bootstrap';
+import LoginPage from './pages/LoginPage';
+
 
 function App() {
-  const [message, setMessage] = useState("");
+  const { instance } = useMsal();
+  const activeAccount = instance.getActiveAccount();
 
-  useEffect(() => {
-    getHello().then((response) => {
-      console.log("data : ", response.data.message);
-      setMessage(response.data.message);
+  const handleLoginRedirect = () => {
+    instance
+      .loginRedirect({
+        ...loginRequest,
+        prompt: 'create',
+      })
+      .catch((error) => console.log(error));
+  };
+
+  const handleLogout = () => {
+    instance.logoutRedirect({
+      postLogoutRedirectUri: window.location.origin, // vuelve al home
     });
-  }, []);
+  };
+
 
   return (
-    <>
-      {/* Rutas del sistema */}
-      <Routes>
-        <Route path="/" element={<MainLayout><HomePage /></MainLayout>} />
-        <Route path="/seleccionar-curso" element={<MainLayout><CourseSelectionPage /></MainLayout>} />
-        <Route path="/curso-detalles" element={<MainLayout><CourseDetailsPage /></MainLayout>} />
-      </Routes>
-
-      {/* Bloque visual adicional */}
-      
-      <h1>Vite + React</h1>
-
-      <div className="card">
-        <p>Mensaje desde el backend: {message || "Cargando..."}</p>
-      </div>
-    </>
+    <div className="App">
+      <AuthenticatedTemplate>
+        {activeAccount ? (
+          <>
+            <Button className="signOutButton" onClick={handleLogout} variant="primary">
+              Sign out
+            </Button>
+            <Container>
+              {/* Puedes mostrar datos del usuario aquí si quieres */}
+              {/* <IdTokenData idTokenClaims={activeAccount.idTokenClaims} /> */}
+              <Routes>
+                <Route path="/" element={<MainLayout><HomePage /></MainLayout>} />
+                {/* <Route path="/home" element={<MainLayout><HomePage /></MainLayout>} /> */}
+                <Route path="/seleccionar-curso" element={<MainLayout><CourseSelectionPage /></MainLayout>} />
+                <Route path="/curso-detalles" element={<MainLayout><CourseDetailsPage /></MainLayout>} />
+              </Routes>
+            </Container></>
+        ) : null}
+      </AuthenticatedTemplate>
+      <UnauthenticatedTemplate>
+        <LoginPage onLogin={handleLoginRedirect} />
+      </UnauthenticatedTemplate>
+    </div>
   );
 }
 
