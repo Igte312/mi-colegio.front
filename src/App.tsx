@@ -1,10 +1,15 @@
 // src/App.tsx
+<<<<<<< HEAD
+=======
+import React from 'react';
+>>>>>>> parent of abb47cf (add serivces)
 import { Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import HomePage from './pages/HomePage';
 // Nota: Estos componentes suelen estar en 'pages' si son rutas completas
 import CourseSelectionPage from './components/CourseSelectionPage'; 
 import CourseDetailsPage from './components/CourseDetailsPage';
+<<<<<<< HEAD
 import CourseAssignmentPage from './components/CourseAssignmentPage';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from '@azure/msal-react';
 import { loginRequest } from './auth/auth-config';
@@ -73,6 +78,18 @@ function App() {
       </UnauthenticatedTemplate>
     </div>
   );
+=======
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<MainLayout><HomePage /></MainLayout>} />
+      {/* Puedes agregar más rutas aquí para otras páginas */}
+      <Route path="/seleccionar-curso" element={<MainLayout><CourseSelectionPage /></MainLayout>} />
+       <Route path="/curso-detalles" element={<MainLayout><CourseDetailsPage /></MainLayout>} />
+    </Routes>
+  );
+>>>>>>> parent of abb47cf (add serivces)
 }
 
 export default App;

@@ -1,5 +1,5 @@
 import { useMsal } from '@azure/msal-react';
-import { protectedResources } from '../auth/auth-config'; // Asegúrate de importar la config correcta
+
 
 // Hook personalizado para obtener el token de acceso
 export const useAccessToken = () => {
@@ -13,7 +13,7 @@ export const useAccessToken = () => {
         }
 
         const request = {
-            scopes: protectedResources.apiSchool.scopes,
+            scopes: protectesdxzdResources.apiSchool.scopes,
             account: account,
             // Aquí podrías agregar más lógica de manejo de errores o de pop-up si falla el silencio
         };
