@@ -10,6 +10,11 @@ const HomePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  exampleMessage;
+  courses;
+  loading;
+  error;
+
   useEffect(() => {
     const fetchData = async () => {
       try {

@@ -1,7 +1,6 @@
 // src/components/Navbar.tsx
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Search } from 'lucide-react';
 import profileImage from '../assets/user.jpg';
 
 const Navbar: React.FC = () => {

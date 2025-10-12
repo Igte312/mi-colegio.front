@@ -23,7 +23,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             ></div>
 
             {/* Rectángulo del login */}
-<div className="bg-white rounded-xl shadow-lg p-20 flex flex-col items-center z-10 transform translate-x-80">
+            <div className="bg-white rounded-xl shadow-lg p-20 flex flex-col items-center z-10 transform translate-x-80">
 
                 {/* 2. REEMPLAZAR <h2> por <img> para mostrar el logo */}
                 <img
