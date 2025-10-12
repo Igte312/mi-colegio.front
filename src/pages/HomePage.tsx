@@ -15,6 +15,7 @@ const HomePage: React.FC = () => {
   loading;
   error;
 
+
   useEffect(() => {
     const fetchData = async () => {
       try {
