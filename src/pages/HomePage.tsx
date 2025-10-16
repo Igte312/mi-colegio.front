@@ -52,8 +52,14 @@ const HomePage: React.FC = () => {
           >
             Seleccionar Curso
           </button>
-          <button className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">
-            Crear Listado
+
+
+
+
+
+          <button className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+          onClick={() => navigate("/utiles-escolares")}>
+            Ver Útiles Activos
           </button>
         </div>
       </div>

@@ -34,3 +34,14 @@ export const getCoursesBySchool = async () => {
   const response = await api.get("/courses/school");
   return response.data;
 };
+
+
+export const getActiveSchoolSupplies = async () => {
+  // Utiliza el endpoint definido: GET /school-supply/active
+  const response = await api.get("/school-supply/active");
+  return response.data.data;
+};
+
+
+
+

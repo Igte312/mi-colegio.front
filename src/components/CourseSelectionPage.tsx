@@ -36,7 +36,9 @@ const CourseSelectionPage: React.FC = () => {
   if (error) return <p className="text-center mt-8 text-red-500">{error}</p>;
 
   return (
-    <div className="p-8">
+    <div className="min-h-screen py-10">
+      <div className="bg-white mx-auto w-full p-8 mx-auto max-w-4xl rounded-lg shadow-xl">
+        
       <h2 className="text-3xl font-bold text-gray-800 mb-8 text-center">
         Seleccione curso a cargar
       </h2>
@@ -57,6 +59,8 @@ const CourseSelectionPage: React.FC = () => {
         ))}
       </div>
     </div>
+      </div>
+
   );
 };
 
