@@ -37,11 +37,48 @@ export const getCoursesBySchool = async () => {
 
 
 export const getActiveSchoolSupplies = async () => {
-  // Utiliza el endpoint definido: GET /school-supply/active
-  const response = await api.get("/school-supply/active");
-  return response.data.data;
+// Utiliza el endpoint definido: GET /school-supply/active
+ const response = await api.get("/school-supply/active");
+ return response.data.data; // <-- Extrae el array de 'data'
+};
+
+// 
+// HU11: Carga de Útiles ASIGNADOS por curso
+export const getAssignedSchoolSuppliesByCourse = async (courseId: number) => {
+ const response = await api.get(`/school-supply/course/${courseId}`);
+ // CORRECCIÓN: Devolvemos response.data.data para obtener el array de útiles.
+ // Esto se alinea con el patrón de getActiveSchoolSupplies y resuelve el crash.
+ return response.data.data; 
 };
 
 
+
+
+
+
+
+
+
+// 🔄 FUNCIÓN ACTUALIZADA (PUT /course-supply-list/update) 🔄
+export const saveCourseSuppliesAssignments = async (
+    courseId: number, 
+    // Tipo de datos que espera el backend: ID del útil y la cantidad
+    assignments: { schoolSupplyId: number; quantity: number }[]
+) => {
+    // 1. Definir el Payload (Cuerpo de la Solicitud)
+    const payload = {
+        courseId: courseId,
+        supplies: assignments // La lista de asignaciones se llama 'supplies' en el payload
+    };
+
+    // 2. Usar PUT con la URL CORRECTA: 
+    //    1. Se elimina la 'S' mayúscula que causaba el error de ruta.
+    //    2. Se elimina la barra inicial '/' para evitar conflictos con baseURL.
+    const response = await api.put("course-supply-list/update", payload); 
+    //                         ^ SIN BARRA INICIAL (PRÁCTICA DEFENSA AXIOS)
+    //                         ^ RUTA CORREGIDA
+
+    return response.data;
+};
 
 
