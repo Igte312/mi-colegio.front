@@ -32,6 +32,9 @@ interface SchoolSupply {
     quantity?: number; // Para útiles asignados
 }
 
+// Nuevo tipo para manejar el estado de la acción en progreso
+type ActionState = 'save' | 'delete' | null;
+
 const SchoolSupplyListPage: React.FC = () => {
     // ESTADOS DE DATOS
     const [allAvailableSupplies, setAllAvailableSupplies] = useState<SchoolSupply[]>([]); 
@@ -43,8 +46,10 @@ const SchoolSupplyListPage: React.FC = () => {
     const [availableSearchTerm, setAvailableSearchTerm] = useState(''); 
     const [selectedCourse, setSelectedCourse] = useState<Course | null>(null); 
     const [loading, setLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false); 
-    const [error, setError] = useState<string | null>(null);
+    // Estado de la acción en curso para diferenciar entre guardar y eliminar
+    const [actionInProgress, setActionInProgress] = useState<ActionState>(null); 
+    const [initialLoadError, setInitialLoadError] = useState<string | null>(null); 
+    const [saveError, setSaveError] = useState<string | null>(null); 
     
     // ESTADOS DE SELECCIÓN DE LISTAS
     const [selectedAvailableId, setSelectedAvailableId] = useState<number | null>(null);
@@ -59,18 +64,23 @@ const SchoolSupplyListPage: React.FC = () => {
         const loadInitialData = async () => {
             try {
                 setLoading(true);
+                setInitialLoadError(null); 
+
                 const suppliesData = await getActiveSchoolSupplies(); 
                 setAllAvailableSupplies(suppliesData); 
+                
                 const coursesResponse = await getCoursesBySchool(); 
                 setAllCourses(coursesResponse.data); 
             } catch (err: any) {
-                if (err.response?.status === 403) {
-                    setError("Acceso denegado. Solo usuarios con rol UTP pueden ver esta lista.");
-                } else if (err.response?.status === 401) {
-                    setError("Sesión expirada o token inválido.");
-                } else {
-                    setError("No se pudieron cargar los datos iniciales.");
+                let errorMessage = "No se pudieron cargar los datos iniciales.";
+                if (err.response) {
+                    if (err.response.status === 403) {
+                        errorMessage = "Acceso denegado. Solo usuarios con rol UTP pueden ver esta lista.";
+                    } else if (err.response.status === 401) {
+                        errorMessage = "Sesión expirada o token inválido.";
+                    }
                 }
+                setInitialLoadError(errorMessage);
                 console.error("Error al cargar datos:", err);
             } finally {
                 setLoading(false);
@@ -84,13 +94,22 @@ const SchoolSupplyListPage: React.FC = () => {
     useEffect(() => {
         if (!selectedCourse) {
             setAssignedSupplies([]);
+            setSaveError(null); 
             return;
         }
+        
+        setSelectedAvailableId(null);
+        setSelectedAssignedId(null);
 
         const loadAssignedSupplies = async () => {
             try {
                 const assignedData = await getAssignedSchoolSuppliesByCourse(selectedCourse.id);
-                setAssignedSupplies(assignedData); 
+                // Aseguramos que 'quantity' sea al menos 1
+                const safeAssignedData = assignedData.map(supply => ({
+                    ...supply,
+                    quantity: supply.quantity && supply.quantity > 0 ? supply.quantity : 1 
+                }));
+                setAssignedSupplies(safeAssignedData); 
             } catch (err) {
                 console.error("Error al cargar útiles asignados:", err);
                 setAssignedSupplies([]);
@@ -109,7 +128,7 @@ const SchoolSupplyListPage: React.FC = () => {
         if (courseSearchTerm.length < 2) return []; 
         const lowerCaseSearch = courseSearchTerm.toLowerCase();
         return allCourses.filter(course => {
-            const fullName = `${course.name} ${course.letter}`.toLowerCase();
+            const fullName = `${course.name} ${course.letter} ${course.level}`.toLowerCase();
             return fullName.includes(lowerCaseSearch);
         });
     }, [allCourses, courseSearchTerm]);
@@ -133,21 +152,21 @@ const SchoolSupplyListPage: React.FC = () => {
 
 
 // ----------------------------------------------------------------------
-// 3. HANDLERS DE LA DOBLE LISTA Y FLECHAS
+// 3. HANDLERS DE LA DOBLE LISTA Y FLECHAS Y GUARDADO
 // ----------------------------------------------------------------------
 
     const assignSupply = (supplyId: number) => {
         const supplyToAssign = allAvailableSupplies.find(s => s.id === supplyId);
         if (supplyToAssign) {
             setAssignedSupplies([...assignedSupplies, { ...supplyToAssign, quantity: 1 }]);
-            setSelectedAvailableId(null); // Deseleccionar al mover
+            setSelectedAvailableId(null); 
         }
     };
 
     const unassignSupply = (supplyId: number) => {
         const newAssignedSupplies = assignedSupplies.filter(s => s.id !== supplyId);
         setAssignedSupplies(newAssignedSupplies);
-        setSelectedAssignedId(null); // Deseleccionar al mover
+        setSelectedAssignedId(null); 
     };
 
     const handleMoveToAssigned = () => {
@@ -162,8 +181,10 @@ const SchoolSupplyListPage: React.FC = () => {
         }
     };
     
-    // Actualización de Cantidad
-    const handleQuantityChange = (supplyId: number, newQuantity: number) => {
+    // Función de cambio de cantidad con validación para asegurar entero >= 1
+    const handleQuantityChange = (supplyId: number, rawValue: string) => {
+        const newQuantity = Math.max(1, parseInt(rawValue) || 1); 
+
         setAssignedSupplies(assignedSupplies.map(supply => 
             supply.id === supplyId 
                 ? { ...supply, quantity: newQuantity } 
@@ -171,48 +192,77 @@ const SchoolSupplyListPage: React.FC = () => {
         ));
     };
 
-    // Función para guardar las asignaciones (HU11) - Lógica de Payload CORREGIDA Y VALIDADA
-    const handleSaveAssignments = async () => {
-        if (!selectedCourse || isSaving) return;
+    // Función principal para GUARDAR ASIGNACIONES o ELIMINAR TOTALMENTE
+    const saveAssignmentsToBackend = async (
+        payload: { schoolSupplyId: number; quantity: number }[],
+        action: ActionState // <-- Recibe el tipo de acción
+    ) => {
+        if (!selectedCourse || actionInProgress) return;
 
-        setIsSaving(true);
-        setError(null);
+        setActionInProgress(action); // <-- Inicia el estado de la acción
+        setSaveError(null); 
 
         try {
-            // Filtramos para asegurar ID y Quantity válidos (Corrección anterior para evitar [null, null, ...])
-            const validAssignedSupplies = assignedSupplies.filter(supply => 
-                supply.id && typeof supply.id === 'number' && 
-                supply.quantity && supply.quantity > 0
-            );
+            await saveCourseSuppliesAssignments(selectedCourse.id, payload);
 
-            if (validAssignedSupplies.length === 0) {
-                setError("No hay útiles válidos para asignar. Asegúrese de que todos los útiles tienen ID y cantidad > 0.");
-                setIsSaving(false);
-                return;
+            const successMessage = payload.length === 0 
+                ? "¡Se eliminaron todos los útiles asignados al curso con éxito!"
+                : "¡Asignación guardada con éxito!";
+            alert(successMessage);
+
+            // Si el payload no está vacío, aseguramos que la lista local esté limpia y actualizada
+            if (payload.length === 0) {
+                 setAssignedSupplies([]);
             }
-
-            // Creamos el payload SOLAMENTE con los útiles filtrados.
-            const assignmentsPayload = validAssignedSupplies.map(supply => ({
-                schoolSupplyId: supply.id, 
-                quantity: supply.quantity!, 
-            }));
-
-            await saveCourseSuppliesAssignments(selectedCourse.id, assignmentsPayload);
-
-            alert("¡Asignación guardada con éxito!");
 
         } catch (err: any) {
             console.error("Error al guardar asignaciones:", err);
             
+            let errorMessage = "Error al intentar guardar las asignaciones. Por favor, inténtelo de nuevo.";
+            
             if (err.response?.status === 404 && err.response.data?.message) {
-                 // Muestra el mensaje específico del backend sobre supplies nulos o inexistentes
-                 setError(`Error de datos: ${err.response.data.message}. Revise los IDs de los útiles asignados.`);
-            } else {
-                 setError("Error al intentar guardar las asignaciones. Por favor, inténtelo de nuevo.");
+                 errorMessage = `Error de datos: ${err.response.data.message}. Revise los IDs de los útiles asignados.`;
+            } else if (err.response?.status === 403) {
+                 errorMessage = "Acceso denegado al guardar. Verifique sus permisos (Rol UTP).";
             }
+            
+            setSaveError(errorMessage);
 
         } finally {
-            setIsSaving(false);
+            setActionInProgress(null); // <-- Limpia el estado al finalizar
+        }
+    };
+
+    // Handler para el botón de ASIGNAR (Guardar la lista actual)
+    const handleSaveAssignments = () => {
+        if (!selectedCourse) return;
+
+        // Filtramos para asegurar ID y Quantity válidos (Quantity > 0)
+        const validAssignedSupplies = assignedSupplies.filter(supply => 
+            supply.id && typeof supply.id === 'number' && 
+            supply.quantity && supply.quantity > 0
+        );
+
+        // Creamos el payload (puede ser [])
+        const assignmentsPayload = validAssignedSupplies.map(supply => ({
+            schoolSupplyId: supply.id, 
+            quantity: supply.quantity!, 
+        }));
+
+        saveAssignmentsToBackend(assignmentsPayload, 'save'); // <-- Pasa 'save' como acción
+    };
+
+    // Handler para el nuevo botón de ELIMINAR TODOS
+    const handleDeleteAllAssignments = () => {
+        if (!selectedCourse || actionInProgress) return;
+
+        const confirmDelete = window.confirm(
+            `¿Está seguro que desea ELIMINAR TODOS los útiles asignados a ${selectedCourse.name} (${selectedCourse.letter})? Esta acción es permanente.`
+        );
+
+        if (confirmDelete) {
+            // Se llama a la función de guardado con un payload VACÍO
+            saveAssignmentsToBackend([], 'delete'); // <-- Pasa 'delete' como acción
         }
     };
         
@@ -222,10 +272,10 @@ const SchoolSupplyListPage: React.FC = () => {
 
     if (loading) return <p className="text-center mt-8">Cargando datos del sistema...</p>;
     
-    if (error && !selectedCourse) return ( // Muestra el error de carga inicial
+    if (initialLoadError) return ( 
         <div className="text-center mt-8 p-4 bg-red-100 border border-red-400 text-red-700 rounded mx-auto max-w-lg">
-            <p className="font-bold">Error de Carga</p>
-            <p>{error}</p>
+            <p className="font-bold">Error de Carga Inicial</p>
+            <p>{initialLoadError}</p>
         </div>
     );
     
@@ -249,7 +299,7 @@ const SchoolSupplyListPage: React.FC = () => {
                                 value={courseSearchTerm}
                                 onChange={(e) => {
                                     setCourseSearchTerm(e.target.value);
-                                    setSelectedCourse(null); 
+                                    if (selectedCourse) setSelectedCourse(null); 
                                 }}
                                 className="w-1/3 p-3 border border-gray-400 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                                 disabled={!!selectedCourse} 
@@ -273,6 +323,11 @@ const SchoolSupplyListPage: React.FC = () => {
                                 ))}
                             </div>
                         )}
+                         {!selectedCourse && courseSearchTerm.length > 0 && courseSearchTerm.length < 2 && (
+                            <div className="absolute z-20 w-1/3 mt-1 p-2 text-sm text-gray-600">
+                                Escriba al menos 2 caracteres para buscar.
+                            </div>
+                        )}
                     </div>
                     
                     {/* Contenido principal: Curso Seleccionado y Doble Lista */}
@@ -285,7 +340,7 @@ const SchoolSupplyListPage: React.FC = () => {
                                 <p className="text-xl text-blue-700">Sección {selectedCourse.letter}</p>
                                 <hr className="my-3 border-blue-300" />
                                 <button 
-                                    onClick={() => { setSelectedCourse(null); setCourseSearchTerm(''); setError(null); }} 
+                                    onClick={() => { setSelectedCourse(null); setCourseSearchTerm(''); setSaveError(null); }} 
                                     className="w-full mt-4 py-2 bg-red-100 text-red-700 font-semibold rounded border border-red-300 hover:bg-red-200 transition"
                                 >
                                     Cambiar Curso
@@ -293,9 +348,9 @@ const SchoolSupplyListPage: React.FC = () => {
                             </div>
                             
                             {/* Mensaje de error al guardar */}
-                            {error && (
+                            {saveError && (
                                 <div className="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded border border-red-300">
-                                    {error}
+                                    {saveError}
                                 </div>
                             )}
 
@@ -314,8 +369,10 @@ const SchoolSupplyListPage: React.FC = () => {
                                     />
                                     
                                     <div className="space-y-1 h-80 overflow-y-auto border border-gray-400 p-2 rounded bg-white">
-                                        {filteredAvailableSupplies.length === 0 && availableSearchTerm === '' ? (
-                                            <p className="text-center text-gray-500 mt-8">No hay útiles disponibles.</p>
+                                        {filteredAvailableSupplies.length === 0 ? (
+                                            <p className="text-center text-gray-500 mt-8">
+                                                {availableSearchTerm ? "No hay coincidencias." : "No hay útiles disponibles o todos están asignados."}
+                                            </p>
                                         ) : (
                                             filteredAvailableSupplies.map((supply) => (
                                                 <div 
@@ -341,8 +398,8 @@ const SchoolSupplyListPage: React.FC = () => {
                                         <button 
                                             onClick={handleMoveToAssigned}
                                             disabled={selectedAvailableId === null}
-                                            className={`text-3xl font-bold transition duration-200 ${
-                                                selectedAvailableId !== null ? 'text-green-600 hover:text-green-800' : 'text-gray-400 cursor-not-allowed'
+                                            className={`text-3xl font-bold transition duration-200 p-2 rounded-full border-2 ${
+                                                selectedAvailableId !== null ? 'text-green-600 border-green-600 hover:bg-green-100' : 'text-gray-400 border-gray-300 cursor-not-allowed'
                                             }`}
                                         >
                                             &gt;&gt;
@@ -350,8 +407,8 @@ const SchoolSupplyListPage: React.FC = () => {
                                         <button 
                                             onClick={handleMoveToAvailable}
                                             disabled={selectedAssignedId === null}
-                                            className={`text-3xl font-bold transition duration-200 ${
-                                                selectedAssignedId !== null ? 'text-red-600 hover:text-red-800' : 'text-gray-400 cursor-not-allowed'
+                                            className={`text-3xl font-bold transition duration-200 p-2 rounded-full border-2 ${
+                                                selectedAssignedId !== null ? 'text-red-600 border-red-600 hover:bg-red-100' : 'text-gray-400 border-gray-300 cursor-not-allowed'
                                             }`}
                                         >
                                             &lt;&lt;
@@ -363,10 +420,12 @@ const SchoolSupplyListPage: React.FC = () => {
                                 <div className="col-span-2 flex flex-col">
                                     <h3 className="text-xl font-semibold text-gray-800 mb-2">Útiles Asignados al Curso</h3>
                                     <div className="space-y-1 h-80 overflow-y-auto border border-gray-400 p-2 rounded bg-white flex-grow">
-                                        <div className="flex justify-between font-bold border-b pb-1 text-sm sticky top-0 bg-white">
-                                            <span>Útil</span>
+                                        {/* Encabezado fijo para la lista asignada */}
+                                        <div className="flex justify-between font-bold border-b pb-1 text-sm sticky top-0 bg-white z-10">
+                                            <span className="flex-1">Útil</span>
                                             <span className="w-20 text-center">Cantidad</span>
                                         </div>
+                                        
                                         {assignedSupplies.length === 0 ? (
                                             <p className="text-center text-gray-500 mt-8">No hay útiles asignados.</p>
                                         ) : (
@@ -387,30 +446,50 @@ const SchoolSupplyListPage: React.FC = () => {
                                                     <input
                                                         type="number"
                                                         min="1"
-                                                        value={supply.quantity || 1}
+                                                        value={supply.quantity ?? 1} 
                                                         onChange={(e) => 
-                                                            handleQuantityChange(supply.id, parseInt(e.target.value) || 1)
+                                                            handleQuantityChange(supply.id, e.target.value)
                                                         }
                                                         onClick={(e) => e.stopPropagation()} 
-                                                        className="w-20 p-1 border rounded text-center"
+                                                        className="w-20 p-1 border rounded text-center focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                                     />
                                                 </div>
                                             ))
                                         )}
                                     </div>
                                     
-                                    {/* Botón Guardar */}
-                                    <div className="mt-4">
+                                    {/* Botones de Guardar y Eliminar */}
+                                    <div className="mt-4 flex flex-col gap-2">
+                                        {/* Botón Guardar/Asignar */}
                                         <button 
                                             onClick={handleSaveAssignments}
-                                            disabled={isSaving || assignedSupplies.length === 0}
-                                            className={`w-full py-3 px-4 rounded font-semibold transition duration-200 ${
-                                                isSaving || assignedSupplies.length === 0
+                                            // Deshabilita si cualquier acción está en progreso
+                                            disabled={actionInProgress !== null} 
+                                            className={`w-full py-3 px-4 rounded font-semibold transition duration-200 shadow-md ${
+                                                // Muestra el estilo de cargando solo si la acción es 'save'
+                                                actionInProgress === 'save' 
                                                     ? 'bg-gray-500 text-white cursor-not-allowed'
                                                     : 'bg-green-600 text-white hover:bg-green-700'
                                             }`}
                                         >
-                                            {isSaving ? 'Guardando...' : 'Asignar útiles al curso'}
+                                            {/* Muestra el texto de cargando solo si la acción es 'save' */}
+                                            {actionInProgress === 'save' ? 'Guardando asignación...' : 'Asignar útiles al curso'}
+                                        </button>
+
+                                        {/* NUEVO BOTÓN: Eliminar Todos los Útiles */}
+                                        <button 
+                                            onClick={handleDeleteAllAssignments}
+                                            // Deshabilita si cualquier acción está en progreso o si la lista está vacía
+                                            disabled={actionInProgress !== null || assignedSupplies.length === 0}
+                                            className={`w-full py-3 px-4 rounded font-semibold transition duration-200 shadow-md ${
+                                                // Muestra el estilo de cargando solo si la acción es 'delete'
+                                                (actionInProgress === 'delete')
+                                                    ? 'bg-gray-500 text-white cursor-not-allowed'
+                                                    : 'bg-red-600 text-white hover:bg-red-700'
+                                            }`}
+                                        >
+                                            {/* Muestra el texto de cargando solo si la acción es 'delete' */}
+                                            {actionInProgress === 'delete' ? 'Eliminando útiles...' : 'Eliminar Todos los Útiles'}
                                         </button>
                                     </div>
                                 </div>
