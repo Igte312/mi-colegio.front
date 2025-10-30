@@ -1,4 +1,5 @@
-// src/pages/SchoolSupplyListPage.tsx
+// ⚠️ ARCHIVO: src/components/SchoolSupplyListPage.tsx (o src/pages/SchoolSupplyListPage.tsx)
+// 🚀 CORRECCIÓN APLICADA: Se eliminó la limpieza de selectedCourse del onChange del input de búsqueda para evitar el crash.
 
 import React, { useEffect, useState, useMemo } from "react";
 // Importamos solo las funciones de API necesarias
@@ -128,7 +129,11 @@ const SchoolSupplyListPage: React.FC = () => {
         if (courseSearchTerm.length < 2) return []; 
         const lowerCaseSearch = courseSearchTerm.toLowerCase();
         return allCourses.filter(course => {
-            const fullName = `${course.name} ${course.letter} ${course.level}`.toLowerCase();
+            // Aseguramos que los campos existan antes de llamar a .toLowerCase()
+            const name = course.name ?? '';
+            const letter = course.letter ?? '';
+            const level = course.level ?? '';
+            const fullName = `${name} ${letter} ${level}`.toLowerCase();
             return fullName.includes(lowerCaseSearch);
         });
     }, [allCourses, courseSearchTerm]);
@@ -143,9 +148,13 @@ const SchoolSupplyListPage: React.FC = () => {
         }
         const lowerCaseSearch = availableSearchTerm.toLowerCase();
         return available.filter(supply => {
+            // Aseguramos que los campos existan antes de llamar a .toLowerCase()
+            const supplyName = supply.name ?? '';
+            const supplyDescription = supply.description ?? '';
+
             return (
-                supply.name.toLowerCase().includes(lowerCaseSearch) ||
-                supply.description.toLowerCase().includes(lowerCaseSearch)
+                supplyName.toLowerCase().includes(lowerCaseSearch) ||
+                supplyDescription.toLowerCase().includes(lowerCaseSearch)
             );
         });
     }, [allAvailableSupplies, assignedSupplies, availableSearchTerm]);
@@ -210,7 +219,7 @@ const SchoolSupplyListPage: React.FC = () => {
                 : "¡Asignación guardada con éxito!";
             alert(successMessage);
 
-            // Si el payload no está vacío, aseguramos que la lista local esté limpia y actualizada
+            // Si el payload está vacío, aseguramos que la lista local se limpie
             if (payload.length === 0) {
                  setAssignedSupplies([]);
             }
@@ -261,7 +270,7 @@ const SchoolSupplyListPage: React.FC = () => {
         );
 
         if (confirmDelete) {
-            // Se llama a la función de guardado con un payload VACÍO
+            // Se llama a la función de guardado con un payload VACÍO
             saveAssignmentsToBackend([], 'delete'); // <-- Pasa 'delete' como acción
         }
     };
@@ -298,10 +307,11 @@ const SchoolSupplyListPage: React.FC = () => {
                                 placeholder="Buscar curso..."
                                 value={courseSearchTerm}
                                 onChange={(e) => {
+                                    // ✅ CORRECCIÓN APLICADA: Solo actualizamos el término de búsqueda.
                                     setCourseSearchTerm(e.target.value);
-                                    if (selectedCourse) setSelectedCourse(null); 
                                 }}
                                 className="w-1/3 p-3 border border-gray-400 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                // El campo se deshabilita cuando un curso ya está seleccionado
                                 disabled={!!selectedCourse} 
                             />
                         </div>
@@ -448,8 +458,9 @@ const SchoolSupplyListPage: React.FC = () => {
                                                         min="1"
                                                         value={supply.quantity ?? 1} 
                                                         onChange={(e) => 
-                                                            handleQuantityChange(supply.id, e.target.value)
-                                                        }
+                                                             handleQuantityChange(supply.id, e.target.value)
+                                                         }
+                                                        // Detener la propagación para que el clic no seleccione toda la fila
                                                         onClick={(e) => e.stopPropagation()} 
                                                         className="w-20 p-1 border rounded text-center focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                                     />
