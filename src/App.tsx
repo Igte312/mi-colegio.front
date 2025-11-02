@@ -8,7 +8,8 @@ import { AuthenticatedTemplate, UnauthenticatedTemplate, useMsal } from '@azure/
 import { loginRequest } from './auth/auth-config';
 import { Button, Container } from 'react-bootstrap';
 import LoginPage from './pages/LoginPage';
-
+import SchoolSupplyListPage from './components/SchoolSupplyListPage';
+import StudentGuardianListPage from './components/StudentGuardianListPage';
 
 function App() {
   const { instance } = useMsal();
@@ -46,6 +47,15 @@ function App() {
                 {/* <Route path="/home" element={<MainLayout><HomePage /></MainLayout>} /> */}
                 <Route path="/seleccionar-curso" element={<MainLayout><CourseSelectionPage /></MainLayout>} />
                 <Route path="/curso-detalles" element={<MainLayout><CourseDetailsPage /></MainLayout>} />
+                <Route
+                  path="/utiles-escolares"
+                  element={<MainLayout><SchoolSupplyListPage /></MainLayout>}
+                />
+                <Route
+                  path="/alumnos-apoderados/:courseId"
+                  // 🔹 CORRECCIÓN: Usar el nombre de componente corregido
+                  element={<MainLayout><StudentGuardianListPage /></MainLayout>}
+                />
               </Routes>
             </Container></>
         ) : null}
