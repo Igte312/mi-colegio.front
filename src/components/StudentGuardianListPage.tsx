@@ -172,5 +172,4 @@ const StudentGuardianListPage: React.FC = () => {
         </div>
     );
 };
-
 export default StudentGuardianListPage;

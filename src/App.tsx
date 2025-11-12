@@ -1,4 +1,5 @@
 // C:\Users\jlopez\Desktop\Mi Colegio\mi-colegio.front\src\App.tsx
+
 import { Routes, Route } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import HomePage from './pages/HomePage';
@@ -6,7 +7,7 @@ import CourseSelectionPage from './components/CourseSelectionPage';
 import CourseDetailsPage from './components/CourseDetailsPage';
 import { AuthenticatedTemplate, UnauthenticatedTemplate, useMsal } from '@azure/msal-react';
 import { loginRequest } from './auth/auth-config';
-import { Button, Container } from 'react-bootstrap';
+import { Container } from 'react-bootstrap'; // ✅ Quitamos Button de aquí
 import LoginPage from './pages/LoginPage';
 import SchoolSupplyListPage from './components/SchoolSupplyListPage';
 import StudentGuardianListPage from './components/StudentGuardianListPage';
@@ -24,27 +25,18 @@ function App() {
       .catch((error) => console.log(error));
   };
 
-  const handleLogout = () => {
-    instance.logoutRedirect({
-      postLogoutRedirectUri: window.location.origin, // vuelve al home
-    });
-  };
-
+  // 🛑 ELIMINAMOS handleLogout (ya está en Navbar.tsx)
 
   return (
     <div className="App">
       <AuthenticatedTemplate>
         {activeAccount ? (
           <>
-            <Button className="signOutButton" onClick={handleLogout} variant="primary">
-              Sign out
-            </Button>
+            {/* 🛑 ELIMINAMOS el botón Sign out */}
+
             <Container>
-              {/* Puedes mostrar datos del usuario aquí si quieres */}
-              {/* <IdTokenData idTokenClaims={activeAccount.idTokenClaims} /> */}
               <Routes>
                 <Route path="/" element={<MainLayout><HomePage /></MainLayout>} />
-                {/* <Route path="/home" element={<MainLayout><HomePage /></MainLayout>} /> */}
                 <Route path="/seleccionar-curso" element={<MainLayout><CourseSelectionPage /></MainLayout>} />
                 <Route path="/curso-detalles" element={<MainLayout><CourseDetailsPage /></MainLayout>} />
                 <Route
@@ -53,11 +45,11 @@ function App() {
                 />
                 <Route
                   path="/alumnos-apoderados/:courseId"
-                  // 🔹 CORRECCIÓN: Usar el nombre de componente corregido
                   element={<MainLayout><StudentGuardianListPage /></MainLayout>}
                 />
               </Routes>
-            </Container></>
+            </Container>
+          </>
         ) : null}
       </AuthenticatedTemplate>
       <UnauthenticatedTemplate>

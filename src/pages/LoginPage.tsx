@@ -1,3 +1,5 @@
+// src/pages/LoginPage.tsx (RESPONSIVO CON TAILWIND CSS)
+
 import React from "react";
 import fondoLogin from "../assets/fondo-login.png";
 import logo from '../assets/logoMicolegio.png';
@@ -9,42 +11,49 @@ interface LoginPageProps {
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     return (
         <div
-            className="relative flex items-center justify-center min-h-screen bg-no-repeat bg-center"
+            className="relative flex items-center justify-center min-h-screen 
+                       bg-no-repeat bg-center bg-cover p-4 sm:p-8" // ✅ Clases bg-cover y padding responsivo
             style={{
                 backgroundImage: `url(${fondoLogin})`,
-                backgroundSize: '125%',
-                backgroundPosition: 'center',
+                // Quitamos backgroundSize: '125%' para usar bg-cover
             }}
         >
-            {/* Barra superior */}
+            {/* Barra superior - Usando clases de Tailwind para opacidad y color */}
             <div
-                className="absolute top-0 left-0 w-full"
-                style={{ height: '100px', backgroundColor: 'rgba(33, 228, 205, 0.36)' }} // 🔹 color teal más suave
+                className="absolute top-0 left-0 w-full h-24 bg-teal-500 opacity-40" // ✅ bg-teal-500 opacity-40 (similar a 0.36)
             ></div>
 
-            {/* Rectángulo del login */}
-            <div className="bg-white rounded-xl shadow-lg p-20 flex flex-col items-center z-10 transform translate-x-80">
+            {/* 🎯 Contenedor del Login (Centrado y Responsivo) */}
+            <div
+                className="bg-white rounded-xl shadow-2xl p-8 sm:p-12 lg:p-16 
+                           flex flex-col items-center z-10 
+                           w-full max-w-sm sm:max-w-md mx-auto"
+            >
 
-                {/* 2. REEMPLAZAR <h2> por <img> para mostrar el logo */}
+                {/* Logo */}
                 <img
                     src={logo}
                     alt="Logo Mi Colegio"
-                    className="mb-20" // Clase para margen inferior, similar al <h2>
-                    style={{ width: '250px', height: 'auto' }} // Opcional: define un tamaño para el logo
+                    className="mb-10 w-48 sm:w-56 lg:w-64 h-auto"
                 />
+
+                {/* Mensaje de apoyo */}
+                <p className="mb-8 text-center text-gray-600 font-medium">
+                    Inicie sesión con su cuenta institucional
+                </p>
 
                 <button
                     onClick={onLogin}
-                    className="w-64 py-3 bg-teal-500 hover:bg-teal-600 text-white font-bold rounded-lg transition duration-300"
+                    className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-lg 
+                               transition duration-300 shadow-md transform hover:scale-[1.01]"
                 >
                     Ingresar
                 </button>
             </div>
 
-            {/* Barra inferior */}
+            {/* Barra inferior - Usando clases de Tailwind para opacidad y color */}
             <div
-                className="absolute bottom-0 left-0 w-full"
-                style={{ height: '99px', backgroundColor: 'rgba(33, 228, 205, 0.36)' }} // 🔹 mismo color suave
+                className="absolute bottom-0 left-0 w-full h-24 bg-teal-500 opacity-40" // ✅ bg-teal-500 opacity-40
             ></div>
         </div>
     );

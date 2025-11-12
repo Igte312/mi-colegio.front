@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
+
+.bg-app-gradient {
+  /* Gradiente exacto que tenías */
+  background-image: linear-gradient(to bottom, #c6ebf0, #c7ecf0);
+}
