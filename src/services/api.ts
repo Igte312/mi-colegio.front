@@ -8,7 +8,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4444/api/v1";
 // 🔹 INTERFAZ NECESARIA para el mapeo de profesores
 interface Teacher {
     id: number;
-    name: string; // Nombre completo: firstName + lastName
+    name: string; 
     email: string;
 }
 
@@ -222,5 +222,95 @@ export const getTeachersBySchool = async (): Promise<{ data: Teacher[] }> => {
 
     } catch (error) {
         throw error;
+    }
+};
+
+
+/**
+ * 🆕 CREAR NUEVO ÚTIL ESCOLAR (POST /school-supply)
+ * Requiere rol UTP y token Azure.
+ */
+export const createSchoolSupply = async (supplyData: NewSupplyData) => {
+    try {
+        // RUTA: POST /school-supply
+        const response = await api.post("/school-supply", supplyData);
+        
+        // Retorna los datos del útil creado de la propiedad 'data'
+        return response.data.data; 
+
+    } catch (error: any) {
+        let errorMessage = "Error desconocido al intentar crear el útil.";
+
+        if (axios.isAxiosError(error) && error.response) {
+            const status = error.response.status;
+            const data = error.response.data;
+
+            if (status === 400) {
+                // Validación fallida: "Name is required"
+                errorMessage = data.message || "Error de validación (400). Nombre o descripción requeridos.";
+            } else if (status === 403) {
+                // Token inválido o rol no permitido
+                errorMessage = data.message || "Acceso denegado (403). Rol UTP requerido.";
+            } else if (status === 500) {
+                errorMessage = data.message || "Error interno del servidor al crear el útil (500).";
+            } else {
+                errorMessage = `Error de servidor al crear el útil. Código: ${status}`;
+            }
+            
+            // Logueamos el error de la API
+            console.error("Error de API al crear útil:", error.response.data);
+            
+            // Lanzamos el error con el mensaje específico
+            throw new Error(errorMessage); 
+        }
+
+        // Si el error no es de Axios (ej. de red), lo lanzamos.
+        throw new Error("Error de red o conexión al crear útil.");
+    }
+};
+
+
+/**
+ * 🗑️ ELIMINAR ÚTIL ESCOLAR (DELETE /school-supply/{id})
+ * Requiere rol UTP y token Azure. Retorna 204 No Content en éxito.
+ * @param schoolSupplyId Identificador único del útil escolar a eliminar.
+ */
+export const deleteSchoolSupply = async (schoolSupplyId: number): Promise<void> => {
+    try {
+        // RUTA: DELETE /school-supply/{id}
+        // El éxito es un 204 No Content, por lo que no retorna datos.
+        await api.delete(`/school-supply/${schoolSupplyId}`);
+        
+    } catch (error: any) {
+        let errorMessage = "Error desconocido al intentar eliminar el útil.";
+
+        if (axios.isAxiosError(error) && error.response) {
+            const status = error.response.status;
+            const data = error.response.data;
+
+            if (status === 404) {
+                // Not Found: No existe un útil con el id indicado.
+                errorMessage = data.message || `Útil escolar con ID ${schoolSupplyId} no encontrado (404).`;
+            } else if (status === 400) {
+                // Bad Request: El parámetro id no es válido.
+                errorMessage = data.message || "Solicitud inválida (400). El ID no es válido.";
+            } else if (status === 403) {
+                // Forbidden: Token inválido o rol no permitido (UTP requerido).
+                errorMessage = data.message || "Acceso denegado (403). Rol UTP requerido.";
+            } else if (status === 500) {
+                // Internal Server Error: El error que estabas viendo.
+                errorMessage = data.message || "Error interno del servidor al eliminar útil (500).";
+            } else {
+                errorMessage = `Error de servidor al eliminar el útil. Código: ${status}`;
+            }
+            
+            console.error(`Error de API al eliminar útil (ID: ${schoolSupplyId}):`, error.response.data);
+            
+            // Lanzar un error para que el componente lo pueda capturar y mostrar.
+            throw new Error(errorMessage); 
+        }
+
+        // Si el error no es de Axios (ej. de red), lo lanzamos.
+        throw new Error("Error de red o conexión al eliminar útil.");
     }
 };

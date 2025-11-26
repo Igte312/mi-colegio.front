@@ -1,5 +1,5 @@
 // ⚠️ ARCHIVO: src/components/SchoolSupplyListPage.tsx (o src/pages/SchoolSupplyListPage.tsx)
-// 🚀 CORRECCIÓN APLICADA: Se eliminó la limpieza de selectedCourse del onChange del input de búsqueda para evitar el crash.
+// 🚀 IMPLEMENTACIÓN FINAL CON MANEJO DE ERROR DE INTEGRIDAD EN ELIMINACIÓN
 
 import React, { useEffect, useState, useMemo } from "react";
 // Importamos solo las funciones de API necesarias
@@ -7,8 +7,10 @@ import {
     getActiveSchoolSupplies, 
     getCoursesBySchool, 
     getAssignedSchoolSuppliesByCourse, 
-    saveCourseSuppliesAssignments 
-} from "../services/api"; 
+    saveCourseSuppliesAssignments,
+    createSchoolSupply, 
+    deleteSchoolSupply 
+} from "../services/api"; // ASUMIMOS QUE TENEMOS UN ARCHIVO services/api.ts
 
 /**
  * Interfaz que define la estructura de un curso
@@ -23,7 +25,6 @@ interface Course {
 
 /**
  * Interfaz que define la estructura de un útil escolar.
- * 'quantity' es esencial para la lista asignada.
  */
 interface SchoolSupply {
     id: number;
@@ -34,7 +35,7 @@ interface SchoolSupply {
 }
 
 // Nuevo tipo para manejar el estado de la acción en progreso
-type ActionState = 'save' | 'delete' | null;
+type ActionState = 'save' | 'delete' | 'create' | 'deleteSupply' | null;
 
 const SchoolSupplyListPage: React.FC = () => {
     // ESTADOS DE DATOS
@@ -47,7 +48,6 @@ const SchoolSupplyListPage: React.FC = () => {
     const [availableSearchTerm, setAvailableSearchTerm] = useState(''); 
     const [selectedCourse, setSelectedCourse] = useState<Course | null>(null); 
     const [loading, setLoading] = useState(true);
-    // Estado de la acción en curso para diferenciar entre guardar y eliminar
     const [actionInProgress, setActionInProgress] = useState<ActionState>(null); 
     const [initialLoadError, setInitialLoadError] = useState<string | null>(null); 
     const [saveError, setSaveError] = useState<string | null>(null); 
@@ -55,31 +55,53 @@ const SchoolSupplyListPage: React.FC = () => {
     // ESTADOS DE SELECCIÓN DE LISTAS
     const [selectedAvailableId, setSelectedAvailableId] = useState<number | null>(null);
     const [selectedAssignedId, setSelectedAssignedId] = useState<number | null>(null);
-        
+    
+    // ESTADOS DE ÚTIL A ELIMINAR
+    const [deleteSupplyError, setDeleteSupplyError] = useState<string | null>(null);
+
+    // ESTADOS DE CREACIÓN DE ÚTIL (MODAL)
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [newSupplyName, setNewSupplyName] = useState('');
+    const [newSupplyDescription, setNewSupplyDescription] = useState('');
+    const [createError, setCreateError] = useState<string | null>(null);
+
 // ----------------------------------------------------------------------
 // 1. EFECTOS DE CARGA DE DATOS
 // ----------------------------------------------------------------------
 
+    /**
+     * Función para cargar/recargar solo los útiles disponibles
+     */
+    const loadActiveSupplies = async () => {
+        try {
+            setInitialLoadError(null); 
+            const suppliesData = await getActiveSchoolSupplies(); 
+            setAllAvailableSupplies(suppliesData); 
+        } catch (err: any) {
+            console.error("Error al recargar útiles:", err);
+            // Solo actualizamos el error si no hay ya un error inicial más grave
+            if (!initialLoadError) {
+                   setInitialLoadError("No se pudieron recargar la lista de útiles disponibles.");
+            }
+        }
+    };
+
     // Carga inicial de Cursos y Útiles DISPONIBLES
     useEffect(() => {
         const loadInitialData = async () => {
+            setLoading(true);
             try {
-                setLoading(true);
-                setInitialLoadError(null); 
+                await loadActiveSupplies(); // Cargar útiles
 
-                const suppliesData = await getActiveSchoolSupplies(); 
-                setAllAvailableSupplies(suppliesData); 
-                
+                // Asumimos que getCoursesBySchool devuelve { data: Course[] }
                 const coursesResponse = await getCoursesBySchool(); 
                 setAllCourses(coursesResponse.data); 
             } catch (err: any) {
                 let errorMessage = "No se pudieron cargar los datos iniciales.";
-                if (err.response) {
-                    if (err.response.status === 403) {
-                        errorMessage = "Acceso denegado. Solo usuarios con rol UTP pueden ver esta lista.";
-                    } else if (err.response.status === 401) {
-                        errorMessage = "Sesión expirada o token inválido.";
-                    }
+                if (err.response?.status === 403) {
+                    errorMessage = "Acceso denegado. Solo usuarios con rol UTP pueden ver esta lista.";
+                } else if (err.response?.status === 401) {
+                    errorMessage = "Sesión expirada o token inválido.";
                 }
                 setInitialLoadError(errorMessage);
                 console.error("Error al cargar datos:", err);
@@ -88,8 +110,7 @@ const SchoolSupplyListPage: React.FC = () => {
             }
         };
         loadInitialData();
-    }, []);
-
+    }, []); // Se ejecuta solo una vez al montar
 
     // Carga de Útiles ASIGNADOS cuando se selecciona un curso
     useEffect(() => {
@@ -104,10 +125,11 @@ const SchoolSupplyListPage: React.FC = () => {
 
         const loadAssignedSupplies = async () => {
             try {
+                // Asumimos que getAssignedSchoolSuppliesByCourse devuelve SchoolSupply[]
                 const assignedData = await getAssignedSchoolSuppliesByCourse(selectedCourse.id);
-                // Aseguramos que 'quantity' sea al menos 1
                 const safeAssignedData = assignedData.map(supply => ({
                     ...supply,
+                    // Asegura que quantity es al menos 1
                     quantity: supply.quantity && supply.quantity > 0 ? supply.quantity : 1 
                 }));
                 setAssignedSupplies(safeAssignedData); 
@@ -124,12 +146,10 @@ const SchoolSupplyListPage: React.FC = () => {
 // 2. LÓGICA DE FILTRADO (useMemo)
 // ----------------------------------------------------------------------
 
-    // Filtrado de CURSOS
     const filteredCourses = useMemo(() => {
         if (courseSearchTerm.length < 2) return []; 
         const lowerCaseSearch = courseSearchTerm.toLowerCase();
         return allCourses.filter(course => {
-            // Aseguramos que los campos existan antes de llamar a .toLowerCase()
             const name = course.name ?? '';
             const letter = course.letter ?? '';
             const level = course.level ?? '';
@@ -138,9 +158,11 @@ const SchoolSupplyListPage: React.FC = () => {
         });
     }, [allCourses, courseSearchTerm]);
 
-    // Filtrado de ÚTILES DISPONIBLES (excluyendo los ya asignados)
     const filteredAvailableSupplies = useMemo(() => {
+        // IDs de útiles que ya están en la lista asignada
         const assignedIds = new Set(assignedSupplies.map(s => s.id));
+        
+        // Filtramos la lista principal para mostrar solo los que no están asignados
         const available = allAvailableSupplies.filter(s => !assignedIds.has(s.id));
 
         if (!availableSearchTerm) {
@@ -148,7 +170,6 @@ const SchoolSupplyListPage: React.FC = () => {
         }
         const lowerCaseSearch = availableSearchTerm.toLowerCase();
         return available.filter(supply => {
-            // Aseguramos que los campos existan antes de llamar a .toLowerCase()
             const supplyName = supply.name ?? '';
             const supplyDescription = supply.description ?? '';
 
@@ -161,12 +182,13 @@ const SchoolSupplyListPage: React.FC = () => {
 
 
 // ----------------------------------------------------------------------
-// 3. HANDLERS DE LA DOBLE LISTA Y FLECHAS Y GUARDADO
+// 3. HANDLERS DE LISTAS Y GUARDADO
 // ----------------------------------------------------------------------
 
     const assignSupply = (supplyId: number) => {
         const supplyToAssign = allAvailableSupplies.find(s => s.id === supplyId);
         if (supplyToAssign) {
+            // Asigna con cantidad inicial de 1
             setAssignedSupplies([...assignedSupplies, { ...supplyToAssign, quantity: 1 }]);
             setSelectedAvailableId(null); 
         }
@@ -190,8 +212,8 @@ const SchoolSupplyListPage: React.FC = () => {
         }
     };
     
-    // Función de cambio de cantidad con validación para asegurar entero >= 1
     const handleQuantityChange = (supplyId: number, rawValue: string) => {
+        // Asegura que el valor es un entero positivo, mínimo 1
         const newQuantity = Math.max(1, parseInt(rawValue) || 1); 
 
         setAssignedSupplies(assignedSupplies.map(supply => 
@@ -201,14 +223,13 @@ const SchoolSupplyListPage: React.FC = () => {
         ));
     };
 
-    // Función principal para GUARDAR ASIGNACIONES o ELIMINAR TOTALMENTE
     const saveAssignmentsToBackend = async (
         payload: { schoolSupplyId: number; quantity: number }[],
-        action: ActionState // <-- Recibe el tipo de acción
+        action: ActionState 
     ) => {
         if (!selectedCourse || actionInProgress) return;
 
-        setActionInProgress(action); // <-- Inicia el estado de la acción
+        setActionInProgress(action); 
         setSaveError(null); 
 
         try {
@@ -219,7 +240,6 @@ const SchoolSupplyListPage: React.FC = () => {
                 : "¡Asignación guardada con éxito!";
             alert(successMessage);
 
-            // Si el payload está vacío, aseguramos que la lista local se limpie
             if (payload.length === 0) {
                  setAssignedSupplies([]);
             }
@@ -238,30 +258,27 @@ const SchoolSupplyListPage: React.FC = () => {
             setSaveError(errorMessage);
 
         } finally {
-            setActionInProgress(null); // <-- Limpia el estado al finalizar
+            setActionInProgress(null); 
         }
     };
 
-    // Handler para el botón de ASIGNAR (Guardar la lista actual)
     const handleSaveAssignments = () => {
         if (!selectedCourse) return;
 
-        // Filtramos para asegurar ID y Quantity válidos (Quantity > 0)
+        // Filtra para asegurar que solo se envíen útiles con ID y cantidad > 0
         const validAssignedSupplies = assignedSupplies.filter(supply => 
             supply.id && typeof supply.id === 'number' && 
             supply.quantity && supply.quantity > 0
         );
 
-        // Creamos el payload (puede ser [])
         const assignmentsPayload = validAssignedSupplies.map(supply => ({
             schoolSupplyId: supply.id, 
-            quantity: supply.quantity!, 
+            quantity: supply.quantity!, // ! asegura al compilador que ya revisamos si es nulo
         }));
 
-        saveAssignmentsToBackend(assignmentsPayload, 'save'); // <-- Pasa 'save' como acción
+        saveAssignmentsToBackend(assignmentsPayload, 'save'); 
     };
 
-    // Handler para el nuevo botón de ELIMINAR TODOS
     const handleDeleteAllAssignments = () => {
         if (!selectedCourse || actionInProgress) return;
 
@@ -270,18 +287,117 @@ const SchoolSupplyListPage: React.FC = () => {
         );
 
         if (confirmDelete) {
-            // Se llama a la función de guardado con un payload VACÍO
-            saveAssignmentsToBackend([], 'delete'); // <-- Pasa 'delete' como acción
+            saveAssignmentsToBackend([], 'delete'); 
         }
     };
-        
+
 // ----------------------------------------------------------------------
-// 4. RENDERING (Diseño ajustado al Wireframe)
+// 4. HANDLERS DE CREACIÓN Y ELIMINACIÓN PERMANENTE DE ÚTILES
+// ----------------------------------------------------------------------
+    
+    /**
+     * Maneja la creación del nuevo útil desde el modal.
+     */
+    const handleCreateNewSupply = async () => {
+        setCreateError(null);
+
+        const trimmedName = newSupplyName.trim();
+        const trimmedDescription = newSupplyDescription.trim();
+        
+        // LÓGICA DE VALIDACIÓN INSTANTÁNEA
+        if (!trimmedName || !trimmedDescription) {
+            setCreateError("❌ ¡Error de validación! El nombre y la descripción del útil son obligatorios.");
+            return; 
+        }
+
+        setActionInProgress('create');
+
+        try {
+            await createSchoolSupply({ 
+                name: trimmedName, 
+                description: trimmedDescription
+            }); 
+
+            await loadActiveSupplies(); 
+            
+            setNewSupplyName('');
+            setNewSupplyDescription('');
+            setIsModalOpen(false);
+            
+            alert(`✅ Útil "${trimmedName}" creado y disponible para asignación.`);
+
+        } catch (err: any) {
+             console.error("Error al crear útil:", err);
+             let errorMessage = "Error al crear el útil. Por favor, intente de nuevo.";
+             if (err.response?.data?.message) {
+                 errorMessage = err.response.data.message;
+             } else if (err.message) {
+                 errorMessage = err.message; 
+             }
+             setCreateError(`🚨 Error de Servidor: ${errorMessage}`);
+        } finally {
+            setActionInProgress(null);
+        }
+    };
+    
+    /**
+     * 🗑️ Maneja la eliminación PERMANENTE de un útil escolar de la lista de disponibles.
+     */
+    const handleDeleteSupplyPermanently = async (supplyId: number) => {
+        const supply = allAvailableSupplies.find(s => s.id === supplyId);
+        
+        if (!supply) return;
+        
+        const confirmDelete = window.confirm(
+            `⚠️ Advertencia: Está a punto de ELIMINAR PERMANENTEMENTE el útil: "${supply.name}". Esta acción NO SE PUEDE deshacer. ¿Desea continuar?`
+        );
+        
+        if (!confirmDelete) return;
+
+        setActionInProgress('deleteSupply');
+        setDeleteSupplyError(null);
+        
+        try {
+            await deleteSchoolSupply(supplyId);
+            
+            await loadActiveSupplies(); 
+            
+            if (selectedAvailableId === supplyId) {
+                setSelectedAvailableId(null);
+            }
+            
+            // Asegurarse de que no esté en la lista asignada 
+            setAssignedSupplies(prev => prev.filter(s => s.id !== supplyId));
+            
+            alert(`🗑️ Útil "${supply.name}" eliminado permanentemente.`);
+            
+        } catch (err: any) {
+            console.error("Error al eliminar útil:", err);
+            let errorMessage = "Error al eliminar el útil. Por favor, intente de nuevo.";
+
+            // 💡 LÓGICA DE MANEJO DE ERROR 500/INTEGRIDAD DE DATOS
+            if (err.response?.status === 500 && err.response.data?.error === "DataIntegrityViolationException") {
+                // Mensaje claro de que el útil tiene dependencias (está asignado)
+                errorMessage = "🚨 NO SE PUEDE ELIMINAR. El útil está actualmente asignado a uno o más cursos. Debe desasignarlo de todos los cursos y guardar el cambio antes de eliminarlo permanentemente.";
+            } else if (err.message) {
+                errorMessage = err.message; 
+            }
+            
+            setDeleteSupplyError(`🚨 Error al eliminar: ${errorMessage}`);
+            
+        } finally {
+            setActionInProgress(null);
+        }
+    };
+
+
+// ----------------------------------------------------------------------
+// 5. RENDERING
 // ----------------------------------------------------------------------
 
     if (loading) return <p className="text-center mt-8">Cargando datos del sistema...</p>;
     
-    if (initialLoadError) return ( 
+    if (initialLoadError && !allCourses.length) return ( 
         <div className="text-center mt-8 p-4 bg-red-100 border border-red-400 text-red-700 rounded mx-auto max-w-lg">
             <p className="font-bold">Error de Carga Inicial</p>
             <p>{initialLoadError}</p>
@@ -292,10 +408,26 @@ const SchoolSupplyListPage: React.FC = () => {
         <div className="min-h-screen py-10 bg-gray-50">
             <div className="mx-auto w-full max-w-6xl">
                 <div className="p-8 bg-white shadow-xl rounded-lg">
+                    {/* ENCABEZADO CON BOTÓN DE CREAR */}
                     <div className="flex justify-between items-start mb-6">
                         <h2 className="text-3xl font-bold text-gray-800">
                             Asignación de Útiles por Curso
                         </h2>
+                        
+                        {/* BOTÓN: Abrir Modal de Creación de Nuevo Útil */}
+                        <button
+                            onClick={() => {
+                                setCreateError(null); 
+                                setNewSupplyName('');
+                                setNewSupplyDescription('');
+                                setIsModalOpen(true);
+                            }}
+                            className="bg-purple-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-purple-700 transition duration-200 shadow-md flex items-center space-x-2"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+                            <span>Crear Nuevo Útil</span>
+                        </button>
+                        
                     </div>
                     
                     {/* 1. BUSCADOR DE CURSO */}
@@ -307,11 +439,9 @@ const SchoolSupplyListPage: React.FC = () => {
                                 placeholder="Buscar curso..."
                                 value={courseSearchTerm}
                                 onChange={(e) => {
-                                    // ✅ CORRECCIÓN APLICADA: Solo actualizamos el término de búsqueda.
                                     setCourseSearchTerm(e.target.value);
                                 }}
                                 className="w-1/3 p-3 border border-gray-400 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                                // El campo se deshabilita cuando un curso ya está seleccionado
                                 disabled={!!selectedCourse} 
                             />
                         </div>
@@ -378,6 +508,13 @@ const SchoolSupplyListPage: React.FC = () => {
                                         className="w-full p-2 border border-gray-300 rounded-lg mb-2"
                                     />
                                     
+                                    {/* Mensaje de error de eliminación para útiles disponibles */}
+                                    {deleteSupplyError && (
+                                        <div className="p-2 mb-2 text-sm text-red-700 bg-red-100 rounded border border-red-300">
+                                            {deleteSupplyError}
+                                        </div>
+                                    )}
+
                                     <div className="space-y-1 h-80 overflow-y-auto border border-gray-400 p-2 rounded bg-white">
                                         {filteredAvailableSupplies.length === 0 ? (
                                             <p className="text-center text-gray-500 mt-8">
@@ -395,7 +532,25 @@ const SchoolSupplyListPage: React.FC = () => {
                                                         selectedAvailableId === supply.id ? 'bg-blue-200 font-semibold' : 'hover:bg-gray-100'
                                                     }`}
                                                 >
-                                                    <span>{supply.name}</span>
+                                                    <span className="flex-1">{supply.name}</span>
+                                                    
+                                                    {/* 🗑️ BOTÓN DE ELIMINACIÓN PERMANENTE */}
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation(); // Evita que se active el onClick del padre
+                                                            handleDeleteSupplyPermanently(supply.id);
+                                                        }}
+                                                        disabled={actionInProgress === 'deleteSupply'}
+                                                        className={`ml-2 text-sm font-semibold p-1 rounded transition duration-200 ${
+                                                            actionInProgress === 'deleteSupply'
+                                                                ? 'text-gray-500 cursor-not-allowed'
+                                                                : 'text-red-600 hover:bg-red-50'
+                                                        }`}
+                                                        title="Eliminar útil permanentemente del sistema"
+                                                    >
+                                                        {actionInProgress === 'deleteSupply' ? '...' : '❌'}
+                                                    </button>
+
                                                 </div>
                                             ))
                                         )}
@@ -458,9 +613,8 @@ const SchoolSupplyListPage: React.FC = () => {
                                                         min="1"
                                                         value={supply.quantity ?? 1} 
                                                         onChange={(e) => 
-                                                             handleQuantityChange(supply.id, e.target.value)
-                                                         }
-                                                        // Detener la propagación para que el clic no seleccione toda la fila
+                                                                    handleQuantityChange(supply.id, e.target.value)
+                                                                }
                                                         onClick={(e) => e.stopPropagation()} 
                                                         className="w-20 p-1 border rounded text-center focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                                     />
@@ -469,37 +623,31 @@ const SchoolSupplyListPage: React.FC = () => {
                                         )}
                                     </div>
                                     
-                                    {/* Botones de Guardar y Eliminar */}
+                                    {/* Botones de Guardar y Eliminar Asignaciones */}
                                     <div className="mt-4 flex flex-col gap-2">
                                         {/* Botón Guardar/Asignar */}
                                         <button 
                                             onClick={handleSaveAssignments}
-                                            // Deshabilita si cualquier acción está en progreso
                                             disabled={actionInProgress !== null} 
                                             className={`w-full py-3 px-4 rounded font-semibold transition duration-200 shadow-md ${
-                                                // Muestra el estilo de cargando solo si la acción es 'save'
                                                 actionInProgress === 'save' 
                                                     ? 'bg-gray-500 text-white cursor-not-allowed'
                                                     : 'bg-green-600 text-white hover:bg-green-700'
                                             }`}
                                         >
-                                            {/* Muestra el texto de cargando solo si la acción es 'save' */}
                                             {actionInProgress === 'save' ? 'Guardando asignación...' : 'Asignar útiles al curso'}
                                         </button>
-
-                                        {/* NUEVO BOTÓN: Eliminar Todos los Útiles */}
+                                        
+                                        {/* Botón Eliminar Todas las Asignaciones */}
                                         <button 
                                             onClick={handleDeleteAllAssignments}
-                                            // Deshabilita si cualquier acción está en progreso o si la lista está vacía
                                             disabled={actionInProgress !== null || assignedSupplies.length === 0}
                                             className={`w-full py-3 px-4 rounded font-semibold transition duration-200 shadow-md ${
-                                                // Muestra el estilo de cargando solo si la acción es 'delete'
-                                                (actionInProgress === 'delete')
+                                                (actionInProgress === 'delete' || assignedSupplies.length === 0)
                                                     ? 'bg-gray-500 text-white cursor-not-allowed'
                                                     : 'bg-red-600 text-white hover:bg-red-700'
                                             }`}
                                         >
-                                            {/* Muestra el texto de cargando solo si la acción es 'delete' */}
                                             {actionInProgress === 'delete' ? 'Eliminando útiles...' : 'Eliminar Todos los Útiles'}
                                         </button>
                                     </div>
@@ -511,6 +659,69 @@ const SchoolSupplyListPage: React.FC = () => {
                     )}
                 </div>
             </div>
+            
+            {/* 6. MODAL DE CREACIÓN DE ÚTIL (Componente flotante) */}
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md">
+                        <h3 className="text-2xl font-bold text-gray-800 mb-4">Crear Nuevo Útil Escolar</h3>
+                        
+                        {createError && (
+                            <div className="p-3 mb-4 text-sm text-red-700 bg-red-100 rounded border border-red-300">
+                                {createError}
+                            </div>
+                        )}
+                        
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Útil</label>
+                            <input
+                                type="text"
+                                value={newSupplyName}
+                                onChange={(e) => setNewSupplyName(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                                disabled={actionInProgress === 'create'}
+                            />
+                        </div>
+                        
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                            <textarea
+                                value={newSupplyDescription}
+                                onChange={(e) => setNewSupplyDescription(e.target.value)}
+                                rows={3}
+                                className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                                disabled={actionInProgress === 'create'}
+                            ></textarea>
+                        </div>
+                        
+                        <div className="flex justify-end space-x-3">
+                            <button
+                                onClick={() => {
+                                    if (actionInProgress !== 'create') {
+                                        setIsModalOpen(false);
+                                    }
+                                }}
+                                disabled={actionInProgress === 'create'}
+                                className="px-4 py-2 text-gray-600 bg-gray-200 rounded hover:bg-gray-300 transition"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleCreateNewSupply}
+                                disabled={actionInProgress === 'create'}
+                                className={`px-4 py-2 rounded font-semibold transition duration-200 ${
+                                    actionInProgress === 'create' 
+                                        ? 'bg-gray-500 text-white cursor-not-allowed'
+                                        : 'bg-purple-600 text-white hover:bg-purple-700'
+                                }`}
+                            >
+                                {actionInProgress === 'create' ? 'Creando...' : 'Guardar Útil'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };
